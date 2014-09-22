@@ -16,10 +16,13 @@ run apt-get -y upgrade
 run apt-get -y install python-pip
 
 # Install deps for backports.lzma (python2 requires it)
-run apt-get -y install python-dev liblzma-dev libevent1-dev
+run apt-get -y install python-dev liblzma-dev libevent1-dev libpq-dev
 
 add . /docker-registry
 add ./config/boto.cfg /etc/boto.cfg
+
+# Install psycopg2
+run pip install psycopg2
 
 # Install core
 run pip install /docker-registry/depends/docker-registry-core
