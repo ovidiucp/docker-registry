@@ -2,7 +2,8 @@
 
 import os
 
-import rsa
+from M2Crypto import BIO
+from M2Crypto import RSA
 import yaml
 
 from docker_registry.core import compat
@@ -17,17 +18,19 @@ class Config(object):
      * interpolate from ENV
     """
 
-    def __init__(self, config=''):
-        try:
+    def __init__(self, config=None):
+        if config is None:
+            config = {}
+        if isinstance(config, compat.basestring):
+            try:
+                self._config = yaml.load(config)
+            except Exception as e:
+                # Failed yaml loading? Stop here!
+                raise exceptions.ConfigError(
+                    'Config is not valid yaml (%s): \n%s' % (e, config))
+        else:
             # Config is kept as-is...
             self._config = config
-            # ... save Strings, that are yaml loaded
-            if isinstance(config, compat.basestring):
-                self._config = yaml.load(config)
-        except Exception as e:
-            # Failed yaml loading? Stop here!
-            raise exceptions.ConfigError(
-                'Config is not valid yaml (%s): \n%s' % (e, config))
 
     def __repr__(self):
         return repr(self._config)
@@ -77,14 +80,7 @@ class Config(object):
         return key in self._config
 
 
-_config = None
-
-
-def load():
-    global _config
-    if _config is not None:
-        return _config
-
+def _init():
     flavor = os.environ.get('SETTINGS_FLAVOR', 'dev')
     config_path = os.environ.get('DOCKER_REGISTRY_CONFIG', 'config.yml')
 
@@ -97,25 +93,47 @@ def load():
         raise exceptions.FileNotFoundError(
             'Heads-up! File is missing: %s' % config_path)
 
-    _config = Config(f.read())
+    conf = Config(f.read())
     if flavor:
-        _config = _config[flavor]
-        _config.flavor = flavor
+        if flavor not in conf:
+            raise exceptions.ConfigError(
+                'The specified flavor (%s) is missing in your config file (%s)'
+                % (flavor, config_path))
+        conf = conf[flavor]
+        conf.flavor = flavor
 
-    if _config.privileged_key:
+    if conf.privileged_key:
         try:
-            f = open(_config.privileged_key)
+            f = open(conf.privileged_key)
         except Exception:
             raise exceptions.FileNotFoundError(
-                'Heads-up! File is missing: %s' % _config.privileged_key)
+                'Heads-up! File is missing: %s' % conf.privileged_key)
 
         try:
-            _config.privileged_key = rsa.PublicKey.load_pkcs1(f.read())
+            pk = f.read().split('\n')
+            pk = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A' + ''.join(pk[1:-2])
+            pk = [pk[i: i + 64] for i in range(0, len(pk), 64)]
+            pk = ('-----BEGIN PUBLIC KEY-----\n' + '\n'.join(pk) +
+                  '\n-----END PUBLIC KEY-----')
+            bio = BIO.MemoryBuffer(pk)
+            conf.privileged_key = RSA.load_pub_key_bio(bio)
         except Exception:
             raise exceptions.ConfigError(
-                'Key at %s is not a valid RSA key' % _config.privileged_key)
+                'Key at %s is not a valid RSA key' % conf.privileged_key)
+        f.close()
 
-    if _config.index_endpoint:
-        _config.index_endpoint = _config.index_endpoint.strip('/')
+    if conf.index_endpoint:
+        conf.index_endpoint = conf.index_endpoint.strip('/')
+
+    return conf
+
+_config = None
+
+
+def load():
+    global _config
+
+    if not _config:
+        _config = _init()
 
     return _config

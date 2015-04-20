@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import docker_registry.run as run
-
 import hashlib
 import os
 import random
@@ -9,6 +7,7 @@ import string
 import unittest
 
 from docker_registry.core import compat
+import docker_registry.wsgi as wsgi
 
 data_dir = os.path.join(os.path.dirname(__file__), "data")
 
@@ -17,8 +16,8 @@ class TestCase(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
-        run.app.testing = True
-        self.http_client = run.app.test_client()
+        wsgi.app.testing = True
+        self.http_client = wsgi.app.test_client()
         # Override the method so we can set headers for every single call
         orig_open = self.http_client.open
 
@@ -34,6 +33,10 @@ class TestCase(unittest.TestCase):
 
     def gen_random_string(self, length=16):
         return ''.join([random.choice(string.ascii_uppercase + string.digits)
+                        for x in range(length)]).lower()
+
+    def gen_hex_string(self, length=16):
+        return ''.join([random.choice(string.hexdigits)
                         for x in range(length)]).lower()
 
     def set_image_checksum(self, image_id, checksum):

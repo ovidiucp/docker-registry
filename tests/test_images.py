@@ -6,6 +6,7 @@ import base
 
 from docker_registry.core import compat
 import docker_registry.images as images
+import docker_registry.lib.signals as signals
 
 json = compat.json
 
@@ -13,14 +14,14 @@ json = compat.json
 class TestImages(base.TestCase):
 
     def test_unset_nginx_accel_redirect_layer(self):
-        image_id = self.gen_random_string()
+        image_id = self.gen_hex_string()
         layer_data = self.gen_random_string(1024)
         self.upload_image(image_id, parent_id=None, layer=layer_data)
         resp = self.http_client.get('/v1/images/{0}/layer'.format(image_id))
         self.assertEqual(layer_data, resp.data)
 
     def test_nginx_accel_redirect_layer(self):
-        image_id = self.gen_random_string()
+        image_id = self.gen_hex_string()
         layer_data = self.gen_random_string(1024)
         self.upload_image(image_id, parent_id=None, layer=layer_data)
 
@@ -47,8 +48,8 @@ class TestImages(base.TestCase):
             images.cfg._config.pop('nginx_x_accel_redirect')
 
     def test_simple(self):
-        image_id = self.gen_random_string()
-        parent_id = self.gen_random_string()
+        image_id = self.gen_hex_string()
+        parent_id = self.gen_hex_string()
         layer_data = self.gen_random_string(1024)
         self.upload_image(parent_id, parent_id=None, layer=layer_data)
         self.upload_image(image_id, parent_id=parent_id, layer=layer_data)
@@ -66,7 +67,7 @@ class TestImages(base.TestCase):
         self.assertEqual(resp.status_code, 404, resp.data)
 
     def test_bytes_range(self):
-        image_id = self.gen_random_string()
+        image_id = self.gen_hex_string()
         layer_data = self.gen_random_string(1024)
         b = random.randint(0, len(layer_data) / 2)
         bytes_range = (b, random.randint(b + 1, len(layer_data) - 1))
@@ -79,3 +80,37 @@ class TestImages(base.TestCase):
         msg = 'expected size: {0}; got: {1}'.format(len(expected_data),
                                                     len(received_data))
         self.assertEqual(expected_data, received_data, msg)
+
+    def before_put_image_json_handler_ok(self, sender, image_json):
+        return None
+
+    def before_put_image_json_handler_not_ok(self, sender, image_json):
+        return "Not ok"
+
+    def test_before_put_image_json_ok(self):
+        image_id = self.gen_hex_string()
+        json_obj = {
+            'id': image_id
+        }
+        json_data = compat.json.dumps(json_obj)
+        with signals.before_put_image_json.connected_to(
+                self.before_put_image_json_handler_ok):
+            resp = self.http_client.put('/v1/images/{0}/json'.format(image_id),
+                                        data=json_data)
+            self.assertEqual(resp.status_code, 200, resp.data)
+
+    def test_before_put_image_json_not_ok(self):
+        image_id = self.gen_hex_string()
+        json_obj = {
+            'id': image_id
+        }
+        json_data = compat.json.dumps(json_obj)
+        with signals.before_put_image_json.connected_to(
+                self.before_put_image_json_handler_not_ok):
+            resp = self.http_client.put('/v1/images/{0}/json'.format(image_id),
+                                        data=json_data)
+            resp_data = json.loads(resp.data)
+            self.assertEqual(resp.status_code, 400, resp.data)
+            self.assertTrue('error' in resp_data,
+                            'Expected error key in response')
+            self.assertEqual(resp_data['error'], 'Not ok', resp.data)

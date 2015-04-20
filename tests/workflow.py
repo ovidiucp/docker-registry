@@ -1,7 +1,7 @@
 """
 How to run locally:
 Start your local registry:
-`INDEX_ENDPOINT=https://indexstaging-docker.dotcloud.com \
+`INDEX_ENDPOINT=https://registry-stage.hub.docker.com' \
  SETTINGS_FLAVOR=test DOCKER_REGISTRY_CONFIG=config_sample.yml docker-registry`
 
 Start the tests:
@@ -36,10 +36,10 @@ class TestWorkflow(base.TestCase):
     # Dev server needs to run on port 5000 in order to run this test
     registry_endpoint = os.environ.get(
         'DOCKER_REGISTRY_ENDPOINT',
-        'https://registrystaging-docker.dotcloud.com')
+        'https://registry-staging.docker.io')
     index_endpoint = os.environ.get(
         'DOCKER_INDEX_ENDPOINT',
-        'https://indexstaging-docker.dotcloud.com')
+        'https://registry-stage.hub.docker.com')
     user_credentials = os.environ['DOCKER_CREDS'].split(':')
 
     def generate_chunk(self, data):
@@ -100,8 +100,8 @@ class TestWorkflow(base.TestCase):
 
     def docker_push(self):
         # Test Push
-        self.image_id = self.gen_random_string()
-        self.parent_id = self.gen_random_string()
+        self.image_id = self.gen_hex_string()
+        self.parent_id = self.gen_hex_string()
         image_id = self.image_id
         parent_id = self.parent_id
         namespace = self.user_credentials[0]
